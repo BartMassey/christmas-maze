@@ -1,5 +1,8 @@
 import math
 import cairo
+import random
+
+random.seed(0)
 
 cellwidth = 10
 dim = 22 * cellwidth
@@ -14,42 +17,71 @@ class Cell(object):
         self.neighbors = set()
         self.walls = set()
         self.border = set()
+        self.parent = None
 
-    def add_neighbor(self, x, y):
-        self.neighbors.add((x, y))
-        self.walls.add((x, y))
+    def add_neighbor(self, n):
+        self.neighbors.add(n)
+        self.walls.add(n)
 
-    def add_border(self, x, y):
-        self.border.add((x, y))
+    def add_border(self, n):
+        self.border.add(n)
 
     def coords(self):
         return self.loc
 
     def render(self, ctx):
+        path = (
+            ((+1, 0), (0, -1), (1.0, 0.0, 0.0)),
+            ((0, +1), (1, 0), (0.0, 1.0, 0.0)),
+            ((-1, 0), (0, 1), (0.0, 0.0, 1.0)),
+            ((0, -1), (-1, 0), (0.0, 0.0, 0.0)),
+        )
+
         origin = self.loc
         x, y = origin
         ctx.move_to(*coord(x, y))
-        path = (
-            ((+1, 0), (0, 1)),
-            ((0, +1), (1, 0)),
-            ((-1, 0), (0, -1)),
-            ((0, -1), (-1, 0)),
-        )
-
         prev = origin
-        for delta, ndelta in path:
-            px, py = prev
+        for delta, ndelta, color in path:
             dx, dy = delta
-            cx, cy = px + dx, py + dy
-            cur = (cx, cy)
             nx, ny = ndelta
+            px, py = prev
+            cx, cy = px + dx, py + dy
             nb = (x + nx, y + ny)
-            if nb in self.walls or nb in self.border:
+            if nb in self.walls:
+                ctx.move_to(*coord(px, py))
+                ctx.set_source_rgb(*color)
                 ctx.line_to(*coord(cx, cy))
-            else:
-                ctx.move_to(*coord(cx, cy))
+                ctx.stroke()
+            elif nb in self.border:
+                if origin == (10, 20):
+                    print("border:", (px, py), (cx, cy))
+                ctx.move_to(*coord(px, py))
+                ctx.set_source_rgb(1.0,0.0,1.0)
+                ctx.line_to(*coord(cx, cy))
+                ctx.stroke()
+            cur = (cx, cy)
             prev = cur
             
+    def unvisit(self):
+        self.parent = None
+
+    def visit(self, parent):
+        self.parent = parent
+    
+    def visited(self):
+        return self.parent != None
+    
+    def remove_wall(self, where):
+        self.walls.remove(where)
+
+    def __str__(self):
+        return "[cell {}: n:{} w:{} b:{} p:{}]".format(
+            self.loc,
+            self.neighbors,
+            self.walls,
+            self.border,
+            self.parent,
+        )
 
 class Maze(object):
     def __init__(self, dim):
@@ -74,21 +106,50 @@ class Maze(object):
             )
             for nxy in neighbors:
                 if nxy in self.cells:
-                    self.cells[nxy].add_neighbor(*c)
-                    self.cells[c].add_neighbor(*nxy)
+                    self.cells[nxy].add_neighbor(c)
+                    self.cells[c].add_neighbor(nxy)
                 else:
                     self.border.add(nxy)
-                    self.cells[c].add_border(*nxy)
+                    self.cells[c].add_border(nxy)
     
     def render(self, ctx):
-        for c in self.cells:
-            self.cells[c].render(ctx)
+        for _, c in self.cells.items():
+            c.render(ctx)
+
+    def unvisit(self):
+        for _, c in self.cells.items():
+            c.unvisit()
+
+    def drill(self):
+        c = self.cells[(10, 20)]
+        c.visit(True)
+        stack = []
+        stack.append((10, 20))
+        while len(stack) > 0:
+            cc = stack.pop()
+            c = self.cells[cc]
+
+            pc = c.parent
+            if pc != None and pc != True:
+                p = self.cells[pc]
+                print("p:{}\nc:{}\n".format(p, c))
+                c.remove_wall(pc)
+                p.remove_wall(cc)
+
+            neighbors = [n for n in c.neighbors if not self.cells[n].visited()]
+            for n in neighbors:
+                self.cells[n].visit(cc)
+            stack += neighbors
+            random.shuffle(stack)
+
+        print(self.cells[(10, 20)])
+        print(self.cells[(7, 19)])
+        print(self.cells[(6, 19)])
 
 maze = Maze(20)
+maze.drill()
 surface = cairo.SVGSurface("maze.svg", dim, dim)
 ctx = cairo.Context(surface)
 ctx.set_tolerance(0.01)
 ctx.set_line_width(0.5)
-ctx.set_source_rgb(0, 0, 0)
 maze.render(ctx)
-ctx.stroke()
