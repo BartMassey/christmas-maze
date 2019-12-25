@@ -31,34 +31,24 @@ class Cell(object):
 
     def render(self, ctx):
         path = (
-            ((+1, 0), (0, -1), (1.0, 0.0, 0.0)),
-            ((0, +1), (1, 0), (0.0, 1.0, 0.0)),
-            ((-1, 0), (0, 1), (0.0, 0.0, 1.0)),
-            ((0, -1), (-1, 0), (0.0, 0.0, 0.0)),
+            ((+1, 0), (0, -1)),
+            ((0, +1), (1, 0)),
+            ((-1, 0), (0, 1)),
+            ((0, -1), (-1, 0)),
         )
 
         origin = self.loc
         x, y = origin
-        ctx.move_to(*coord(x, y))
         prev = origin
-        for delta, ndelta, color in path:
+        for delta, ndelta in path:
             dx, dy = delta
             nx, ny = ndelta
             px, py = prev
             cx, cy = px + dx, py + dy
             nb = (x + nx, y + ny)
-            if nb in self.walls:
+            if nb in self.walls or nb in self.border:
                 ctx.move_to(*coord(px, py))
-                ctx.set_source_rgb(*color)
                 ctx.line_to(*coord(cx, cy))
-                ctx.stroke()
-            elif nb in self.border:
-                if origin == (10, 20):
-                    print("border:", (px, py), (cx, cy))
-                ctx.move_to(*coord(px, py))
-                ctx.set_source_rgb(1.0,0.0,1.0)
-                ctx.line_to(*coord(cx, cy))
-                ctx.stroke()
             cur = (cx, cy)
             prev = cur
             
@@ -132,7 +122,6 @@ class Maze(object):
             pc = c.parent
             if pc != None and pc != True:
                 p = self.cells[pc]
-                print("p:{}\nc:{}\n".format(p, c))
                 c.remove_wall(pc)
                 p.remove_wall(cc)
 
@@ -142,14 +131,12 @@ class Maze(object):
             stack += neighbors
             random.shuffle(stack)
 
-        print(self.cells[(10, 20)])
-        print(self.cells[(7, 19)])
-        print(self.cells[(6, 19)])
-
 maze = Maze(20)
 maze.drill()
 surface = cairo.SVGSurface("maze.svg", dim, dim)
 ctx = cairo.Context(surface)
 ctx.set_tolerance(0.01)
 ctx.set_line_width(0.5)
+ctx.set_source_rgb(0, 0, 0)
 maze.render(ctx)
+ctx.stroke()
